@@ -1,0 +1,1 @@
+rootProject.name = "stellar_muxed_wallets"
