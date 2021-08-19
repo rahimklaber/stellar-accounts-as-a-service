@@ -20,7 +20,7 @@ fun Application.module() {
     configureHTTP()
     configureSerialization()
     configureSockets()
-    val walletname = environment.config.property("dbname").getString()
+    val walletname = environment.config.property("database.dbname").getString()
     Database.connect(
         url = "jdbc:sqlite:$walletname"
     )

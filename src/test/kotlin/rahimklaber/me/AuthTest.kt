@@ -30,7 +30,7 @@ class AuthTest {
             put("jwt.audience", "test")
             put("jwt.realm", "test")
             put("jwt.domain", "test")
-            put("dbname", "test/test-${Random.nextLong()}-.db")
+            put("database.dbname", "test/test-${Random.nextLong()}-.db")
         }
     }
 
