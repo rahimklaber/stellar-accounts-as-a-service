@@ -61,7 +61,7 @@ object AuthService {
                     .withIssuer(JwtConfig.issuer)
                     .withSubject(user.username)
                     .withClaim("username",user.username)
-                    .withExpiresAt(Date(System.currentTimeMillis() + 60000))
+                    .withExpiresAt(Date(System.currentTimeMillis() + 86_400_000/*one day*/ ))
                     .sign(Algorithm.HMAC256(JwtConfig.secret))
                 LoginResponse.Success(token)
             }
@@ -85,7 +85,6 @@ object AuthService {
 
             }
         }
-        println(tx)
         return when(tx.isSuccess){
             true -> RegisterResponse.Success
             false -> RegisterResponse.ExistingAccount

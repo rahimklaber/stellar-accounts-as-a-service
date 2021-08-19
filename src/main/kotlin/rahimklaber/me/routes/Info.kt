@@ -8,8 +8,10 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import io.ktor.routing.get
+import rahimklaber.me.models.InfoResponse
 import rahimklaber.me.repositories.BalanceRepository
 import rahimklaber.me.repositories.UserRepository
+import rahimklaber.me.services.WalletService
 
 object Info {
 
@@ -19,7 +21,8 @@ object Info {
                 val principal = call.principal<JWTPrincipal>()
                 val username = principal?.payload?.subject ?: throw Error("Jwt principal is null")
                 val balance = BalanceRepository.findByUsername(username)
-                call.respond(HttpStatusCode.OK,balance)
+                val address = WalletService.muxedAddressFromId(balance.muxedId)
+                call.respond(HttpStatusCode.OK,InfoResponse(address,balance.balance.toString()))
             }
         }
     }

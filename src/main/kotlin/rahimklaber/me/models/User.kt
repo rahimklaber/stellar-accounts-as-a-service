@@ -22,4 +22,4 @@ object Balance : Table(){
 data class UserModel(val username: String, val password: String)
 
 @Serializable
-data class BalanceModel(val muxedId: Long, val balance : Float )
+data class BalanceModel(val username: String,val muxedId: Long, val balance : Float )

@@ -5,6 +5,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 import rahimklaber.me.models.Balance
+import rahimklaber.me.models.ProcessedOperations
 import rahimklaber.me.models.User
 import rahimklaber.me.plugins.*
 import rahimklaber.me.services.WalletService
@@ -23,7 +24,7 @@ fun Application.module() {
         url = "jdbc:sqlite:wallet.db"
     )
     transaction{
-        SchemaUtils.create(User,Balance)
+        SchemaUtils.create(User,Balance,ProcessedOperations)
     }
-    WalletService.pay(10,"",0.0f)
+    WalletService()
 }
