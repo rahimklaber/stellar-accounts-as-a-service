@@ -35,6 +35,9 @@ dependencies {
 
     implementation("com.github.stellar:java-stellar-sdk:0.26.0")
 
+    implementation("org.valiktor:valiktor-core:0.12.0")
+
+
     implementation("org.xerial:sqlite-jdbc:3.36.0.1")
     implementation("com.michael-bull.kotlin-result:kotlin-result:1.1.12")
     implementation("at.favre.lib:bcrypt:0.9.0")

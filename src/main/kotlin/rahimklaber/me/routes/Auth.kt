@@ -20,9 +20,14 @@ object Auth{
      */
     fun Routing.register(){
         post("/register") {
-            val user = call.receive<UserModel>()
-            val response = AuthService.register(user.username,user.password)
-            call.respond(status = response.responseCode,"")
+            val tryDecode = kotlin.runCatching { call.receive<UserModel>() }
+            if(tryDecode.isSuccess){
+                val user = tryDecode.getOrThrow()
+                val response = AuthService.register(user.username,user.password)
+                call.respond(response.responseCode,"")
+            }else{
+                call.respond(HttpStatusCode.BadRequest,"")
+            }
         }
     }
 
@@ -34,11 +39,18 @@ object Auth{
      */
     fun Routing.login(){
         post("/login"){
-            val user = call.receive<UserModel>()
-            val response = AuthService.login(user.username,user.password)
-            when(response){
-                is LoginResponse.Success -> call.respond(response.response, mapOf("apikey" to response.token))
-                else -> call.respond(response.response,"")
+            val tryDecode = kotlin.runCatching { call.receive<UserModel>() }
+            if(tryDecode.isSuccess) {
+                val user = tryDecode.getOrThrow()
+                when (val response = AuthService.login(user.username, user.password)) {
+                    is LoginResponse.Success -> call.respond(
+                        response.response,
+                        mapOf("apikey" to response.token)
+                    )
+                    else -> call.respond(response.response, "")
+                }
+            }else{
+                call.respond(HttpStatusCode.BadRequest,"")
             }
 
         }

@@ -27,9 +27,10 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 
 sealed class PayResult(val statusCode: HttpStatusCode){
-    class Ok() : PayResult(HttpStatusCode.OK)
+    class Ok() : PayResult(HttpStatusCode.NoContent)
     class DestinationNotExists() : PayResult(HttpStatusCode.BadRequest)
     class InsufficientBalance() : PayResult(HttpStatusCode.Conflict)
+    class MalformedDestination() : PayResult(HttpStatusCode.BadRequest)
 }
 
 /**
@@ -166,7 +167,7 @@ object WalletService {
         }
 
         val muxedAddress = muxedAddressFromId(source.muxedId)
-        val sequence = server.accounts().account(keyPair.accountId).sequenceNumber
+        val sequence = withContext(Dispatchers.IO){ server.accounts().account(keyPair.accountId).sequenceNumber}
         val account = Account(muxedAddress,sequence)
         val tx = Transaction.Builder(AccountConverter.enableMuxed(),account, Network.TESTNET)
             .addOperation(
@@ -175,22 +176,23 @@ object WalletService {
             .setBaseFee(120)
             .setTimeout(0)
             .build()
+        try {
+            tx.sign(keyPair)
+        }catch (e: FormatException){
+            // destination address is malformed
+            return PayResult.DestinationNotExists()
+        }
 
-        tx.sign(keyPair)
-
-        val res = server.submitTransaction(tx)
+        val res = withContext(Dispatchers.IO){ server.submitTransaction(tx)}
         if(res.isSuccess){
             transaction {
                 Balance.update({Balance.id eq source.muxedId}) { it[Balance.balance] = source.balance - amount }
             }
             return PayResult.Ok()
         }
-
-        println("success : ${res.isSuccess}")
-        println("extra : ${res.extras.resultCodes.operationsResultCodes}")
-        println("txres : ${res.decodedTransactionResult}")
         return when(res.extras.resultCodes.operationsResultCodes[0]){
             "op_underfunded" -> PayResult.InsufficientBalance()
+            "op_no_destination" -> PayResult.DestinationNotExists()
             else -> throw Error("Unknown payment error")
         }
     }
