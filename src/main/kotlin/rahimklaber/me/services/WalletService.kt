@@ -58,10 +58,10 @@ object WalletService {
                             if (json["to_muxed_id"] != null) {
                                 val checkIfProcessed = transaction {
                                     ProcessedOperations.select { ProcessedOperations.id eq payment.id }
-                                        .count()
+                                        .any()
                                 }
                                 // dont handle if we allready handeled it.
-                                if(checkIfProcessed == 1L){
+                                if(checkIfProcessed){
                                     return
                                 }
                                 val muxedId =

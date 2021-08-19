@@ -20,8 +20,9 @@ fun Application.module() {
     configureHTTP()
     configureSerialization()
     configureSockets()
+    val walletname = environment.config.property("dbname").getString()
     Database.connect(
-        url = "jdbc:sqlite:wallet.db"
+        url = "jdbc:sqlite:$walletname"
     )
     transaction{
         SchemaUtils.create(User,Balance,ProcessedOperations)
