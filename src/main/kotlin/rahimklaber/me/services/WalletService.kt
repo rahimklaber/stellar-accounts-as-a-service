@@ -52,7 +52,6 @@ object WalletService {
     val server = Server("https://horizon-testnet.stellar.org")
     lateinit var keyPair: KeyPair
     private val baseEncoding = BaseEncoding.base32().upperCase().omitPadding()
-    private val mutex = Mutex() // use mutex so a user cannot "Double spend"
     lateinit var streamEvent: SSEStream<OperationResponse>
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val payRequests = Channel<WalletPayRequest>(capacity = 100)
@@ -207,7 +206,7 @@ object WalletService {
      * @param amount Payment amount
      * @return Payment result.
      */
-    suspend fun pay(muxedId: Long, destination: String, amount: Float, channelAccount : String = keyPair.accountId): PayResult = mutex.withLock {
+    suspend fun pay(muxedId: Long, destination: String, amount: Float, channelAccount : String = keyPair.accountId): PayResult {
         val source = withContext(Dispatchers.IO) {
             BalanceRepository.findByMuxedId(muxedId)
         }
