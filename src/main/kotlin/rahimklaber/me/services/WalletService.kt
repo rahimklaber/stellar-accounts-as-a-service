@@ -28,7 +28,7 @@ import java.io.IOException
 
 sealed class PayResult(val statusCode: HttpStatusCode){
     class Ok() : PayResult(HttpStatusCode.NoContent)
-    class DestinationNotExists() : PayResult(HttpStatusCode.BadRequest)
+    class DestinationNotExists() : PayResult(HttpStatusCode.NotFound)
     class InsufficientBalance() : PayResult(HttpStatusCode.Conflict)
     class MalformedDestination() : PayResult(HttpStatusCode.BadRequest)
 }

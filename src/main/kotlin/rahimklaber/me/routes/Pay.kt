@@ -26,25 +26,16 @@ object Pay {
         authenticate("auth-jwt") {
             post("/pay") {
                 val principal = call.principal<JWTPrincipal>()
-                val tryDecode = runCatching { call.receive<PayRequestModel>() }
+                val tryDecode = runCatching { val body = call.receive<PayRequestModel>();require(body.amount.toFloat() > 0);body }
                 if(tryDecode.isSuccess){
                     val payRequest = tryDecode.getOrThrow()
-                    val validateResult = kotlin.runCatching {
-                        validate(payRequest) {
-                            validate(PayRequestModel::amount).isNotEmpty()
-                                .contains(Regex("^[0-9]+$"))
-                        }
-                    }
-                    if(validateResult.isSuccess){
                         val username = principal?.payload?.subject ?: throw Error("Jwt principal is null")
-                        val balance = withContext(Dispatchers.IO){ BalanceRepository.findByUsername(username)}
+                        val balance = withContext(Dispatchers.IO){ BalanceRepository.findByUsername (username)}
                         val response = WalletService.pay(balance.muxedId,payRequest.destination,payRequest.amount.toFloat())
 
                         call.respond(response.statusCode,"")
-                    }else{
-                        call.respond(HttpStatusCode.BadRequest,"")
-                    }
                 }else{
+                    println(tryDecode)
                     call.respond(HttpStatusCode.BadRequest,"")
                 }
 

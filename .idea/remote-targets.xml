@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteTargetsManager">
+    <targets>
+      <target name="rahim@25.76.50.195:22" type="ssh/sftp">
+        <config>
+          <option name="projectRootOnTarget" value="/home/rahim/stellar_muxed_wallets" />
+          <option name="serverName" value="rahim@25.76.50.195:22 password" />
+        </config>
+        <ContributedStateBase type="GradleRuntime">
+          <config>
+            <option name="homePath" value="/opt/gradle/latest" />
+          </config>
+        </ContributedStateBase>
+        <ContributedStateBase type="JavaLanguageRuntime">
+          <config>
+            <option name="homePath" value="/usr/lib/jvm/java-11-openjdk-amd64" />
+            <option name="javaVersionString" value="11" />
+          </config>
+        </ContributedStateBase>
+      </target>
+    </targets>
+  </component>
+</project>
