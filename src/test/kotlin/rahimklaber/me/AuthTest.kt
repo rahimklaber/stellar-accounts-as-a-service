@@ -14,6 +14,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.stellar.sdk.KeyPair
 import rahimklaber.me.models.InfoResponse
 import rahimklaber.me.models.UserModel
 import rahimklaber.me.services.WalletService
@@ -30,6 +31,7 @@ class AuthTest {
             put("jwt.audience", "test")
             put("jwt.realm", "test")
             put("jwt.domain", "test")
+            put("stellar.secret", String(KeyPair.random().secretSeed))
             put("database.dbname", "test/test-${Random.nextLong()}-.db")
         }
     }

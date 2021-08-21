@@ -35,6 +35,7 @@ class PayTest {
             put("jwt.audience", "test")
             put("jwt.realm", "test")
             put("jwt.domain", "test")
+            put("stellar.secret", "SAKAV6SBYWF72ELNN5M4LDZDTQLLW6DOZNEVEKS6VBBBIHHXZFV4FWZE")
             put("database.dbname", "test/test-${Random.nextLong()}-.db")
         }
     }
