@@ -13,6 +13,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.stellar.sdk.*
 import org.stellar.sdk.requests.EventListener
+import org.stellar.sdk.requests.SSEStream
 import org.stellar.sdk.responses.operations.OperationResponse
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
 import rahimklaber.me.models.Balance
@@ -38,15 +39,15 @@ sealed class PayResult(val statusCode: HttpStatusCode){
  */
 object WalletService {
     val server = Server("https://horizon-testnet.stellar.org")
-    val keyPair = KeyPair.fromSecretSeed("SAKAV6SBYWF72ELNN5M4LDZDTQLLW6DOZNEVEKS6VBBBIHHXZFV4FWZE")
-    val baseEncoding = BaseEncoding.base32().upperCase().omitPadding()
-    val mutex = Mutex() // use mutex so a user cannot "Double spend"
-    lateinit var incomingHandlerJob : Job
+    lateinit var keyPair : KeyPair
+    private val baseEncoding = BaseEncoding.base32().upperCase().omitPadding()
+    private val mutex = Mutex() // use mutex so a user cannot "Double spend"
+    lateinit var streamEvent : SSEStream<OperationResponse>
 
     //start streaming from Horizon.
-    operator fun invoke(){
-        incomingHandlerJob =  GlobalScope.launch {
-            server.payments().forAccount(keyPair.accountId).stream(object : EventListener<OperationResponse>{
+    operator fun invoke(secret: String){
+       keyPair = KeyPair.fromSecretSeed(secret)
+            streamEvent =  server.payments().forAccount(keyPair.accountId).stream(object : EventListener<OperationResponse>{
                 override fun onEvent(payment : OperationResponse) {
                     //Todo fix when Java sdk has proper support for muxed accounts.
                     try {
@@ -91,7 +92,6 @@ object WalletService {
                 }
 
             })
-        }
     }
 
     // copied from StrKey.java

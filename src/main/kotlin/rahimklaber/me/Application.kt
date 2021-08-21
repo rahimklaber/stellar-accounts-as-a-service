@@ -27,5 +27,7 @@ fun Application.module() {
     transaction{
         SchemaUtils.create(User,Balance,ProcessedOperations)
     }
-    WalletService()
+    val secretKey = environment.config.property("stellar.secret").getString()
+
+    WalletService(secretKey)
 }
