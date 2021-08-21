@@ -134,6 +134,12 @@ class PayTest {
             module()
         }) {
             val apikey = login()
+            transaction {
+                Balance.update({ Balance.id eq 1 }) {
+                    it[Balance.balance] =
+                        100.0f
+                }
+            }
             handleRequest(HttpMethod.Post,"/pay"){
                 addHeader("Authorization", "Bearer $apikey")
                 addHeader("Content-Type", "application/json")

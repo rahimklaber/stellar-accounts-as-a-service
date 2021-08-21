@@ -2,6 +2,10 @@ package rahimklaber.me.services
 
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -27,11 +31,18 @@ import shadow.okhttp3.Request
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
-sealed class PayResult(val statusCode: HttpStatusCode){
-    class Ok() : PayResult(HttpStatusCode.NoContent)
-    class DestinationNotExists() : PayResult(HttpStatusCode.NotFound)
-    class InsufficientBalance() : PayResult(HttpStatusCode.Conflict)
-    class MalformedDestination() : PayResult(HttpStatusCode.BadRequest)
+sealed class PayResult(val statusCode: HttpStatusCode) {
+    class Ok : PayResult(HttpStatusCode.NoContent)
+    class DestinationNotExists : PayResult(HttpStatusCode.NotFound)
+    class InsufficientBalance : PayResult(HttpStatusCode.Conflict)
+    class MalformedDestination : PayResult(HttpStatusCode.BadRequest)
+}
+
+class WalletPayRequest(val sourceMuxedId: Long, val destination: String, val amount: Float){
+    private var resultChannel = Channel<PayResult>() //todo is this correct use?
+
+    suspend fun sendResult(result: PayResult) = resultChannel.send(result)
+    suspend fun receiveResult() = resultChannel.receive()
 }
 
 /**
@@ -39,16 +50,20 @@ sealed class PayResult(val statusCode: HttpStatusCode){
  */
 object WalletService {
     val server = Server("https://horizon-testnet.stellar.org")
-    lateinit var keyPair : KeyPair
+    lateinit var keyPair: KeyPair
     private val baseEncoding = BaseEncoding.base32().upperCase().omitPadding()
     private val mutex = Mutex() // use mutex so a user cannot "Double spend"
-    lateinit var streamEvent : SSEStream<OperationResponse>
+    lateinit var streamEvent: SSEStream<OperationResponse>
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val payRequests = Channel<WalletPayRequest>(capacity = 100)
+    lateinit var paymentsHandlerJob: Job
 
     //start streaming from Horizon.
-    operator fun invoke(secret: String){
-       keyPair = KeyPair.fromSecretSeed(secret)
-            streamEvent =  server.payments().forAccount(keyPair.accountId).stream(object : EventListener<OperationResponse>{
-                override fun onEvent(payment : OperationResponse) {
+    operator fun invoke(secret: String) {
+        keyPair = KeyPair.fromSecretSeed(secret)
+        streamEvent = server.payments().forAccount(keyPair.accountId)
+            .stream(object : EventListener<OperationResponse> {
+                override fun onEvent(payment: OperationResponse) {
                     //Todo fix when Java sdk has proper support for muxed accounts.
                     try {
                         if (payment is PaymentOperationResponse && payment.asset is AssetTypeNative && payment.to == keyPair.accountId) {
@@ -62,11 +77,12 @@ object WalletService {
                                         .any()
                                 }
                                 // dont handle if we allready handeled it.
-                                if(checkIfProcessed){
+                                if (checkIfProcessed) {
                                     return
                                 }
                                 val muxedId =
-                                    json["to_muxed_id"]?.jsonPrimitive?.toString()?.removeSurrounding("\"")?.toLong()!!
+                                    json["to_muxed_id"]?.jsonPrimitive?.toString()
+                                        ?.removeSurrounding("\"")?.toLong()!!
                                 println("got ${payment.amount} for $muxedId")
                                 transaction {
                                     val balance = Balance
@@ -82,7 +98,7 @@ object WalletService {
                                 }
                             }
                         }
-                    }catch (e: Throwable){
+                    } catch (e: Throwable) {
                         println(e)
                     }
                 }
@@ -92,6 +108,20 @@ object WalletService {
                 }
 
             })
+        paymentsHandlerJob = scope.launch {
+            while (true){
+                delay(1000)
+                println("received")
+                val request = payRequests.receive()
+                launch {
+                    println("started")
+                    val result = pay(request.sourceMuxedId,request.destination,request.amount)
+                    println(result)
+                    request.sendResult(result)
+                }
+            }
+        }
+
     }
 
     // copied from StrKey.java
@@ -109,7 +139,7 @@ object WalletService {
 
         while (count > 0) {
             code = crc ushr 8 and 0xFF
-            code = code xor (bytes[i++].toInt() and  0xFF)
+            code = code xor (bytes[i++].toInt() and 0xFF)
             code = code xor (code ushr 4)
             crc = crc shl 8 and 0xFFFF
             crc = crc xor code
@@ -124,12 +154,13 @@ object WalletService {
 
         return byteArrayOf(crc.toByte(), (crc ushr 8).toByte())
     }
+
     // copied from StrKey.java
     // Todo: fix when java sdk has this available.
-    fun muxedAddressFromId(muxedId: Long) : String{
+    fun muxedAddressFromId(muxedId: Long): String {
         val publicKeyBytes = keyPair.xdrPublicKey.ed25519.uint256
         val muxedIdBytes = Longs.toByteArray(muxedId)
-        val data = Bytes.concat(publicKeyBytes,muxedIdBytes)
+        val data = Bytes.concat(publicKeyBytes, muxedIdBytes)
         val muxedVersionByte = (12 shl 3)
 
         return try {
@@ -148,6 +179,12 @@ object WalletService {
     }
 
     /**
+     * Send a request for the wallet service to make payments.
+     *
+     */
+    suspend fun sendPaymentRequest(request: WalletPayRequest) = payRequests.send(request)
+
+    /**
      * Handle payments for users of the service.
      *
      * A mutex is used to prevent a user from making two requests in quick succession and "Double spending".
@@ -157,40 +194,44 @@ object WalletService {
      * @param amount Payment amount
      * @return Payment result.
      */
-    suspend fun pay(muxedId: Long, destination: String, amount : Float): PayResult = mutex.withLock {
-        val source = withContext(Dispatchers.IO){
+    suspend fun pay(muxedId: Long, destination: String, amount: Float): PayResult = mutex.withLock {
+        val source = withContext(Dispatchers.IO) {
             BalanceRepository.findByMuxedId(muxedId)
         }
 
-        if(source.balance < amount){
+        if (source.balance < amount) {
             return PayResult.InsufficientBalance()
         }
 
         val muxedAddress = muxedAddressFromId(source.muxedId)
-        val sequence = withContext(Dispatchers.IO){ server.accounts().account(keyPair.accountId).sequenceNumber}
-        val account = Account(muxedAddress,sequence)
-        val tx = Transaction.Builder(AccountConverter.enableMuxed(),account, Network.TESTNET)
+        val sequence = withContext(Dispatchers.IO) {
+            server.accounts().account(keyPair.accountId).sequenceNumber
+        }
+        val account = Account(muxedAddress, sequence)
+        val tx = Transaction.Builder(AccountConverter.enableMuxed(), account, Network.TESTNET)
             .addOperation(
-                PaymentOperation.Builder(destination,AssetTypeNative(),amount.toString()).build()
+                PaymentOperation.Builder(destination, AssetTypeNative(), amount.toString()).build()
             )
             .setBaseFee(120)
             .setTimeout(0)
             .build()
         try {
             tx.sign(keyPair)
-        }catch (e: FormatException){
+        } catch (e: FormatException) {
             // destination address is malformed
             return PayResult.DestinationNotExists()
         }
 
-        val res = withContext(Dispatchers.IO){ server.submitTransaction(tx)}
-        if(res.isSuccess){
+        val res = withContext(Dispatchers.IO) { server.submitTransaction(tx) }
+        if (res.isSuccess) {
             transaction {
-                Balance.update({Balance.id eq source.muxedId}) { it[Balance.balance] = source.balance - amount }
+                Balance.update({ Balance.id eq source.muxedId }) {
+                    it[Balance.balance] = source.balance - amount
+                }
             }
             return PayResult.Ok()
         }
-        return when(res.extras.resultCodes.operationsResultCodes[0]){
+        return when (res.extras.resultCodes.operationsResultCodes[0]) {
             "op_underfunded" -> PayResult.InsufficientBalance()
             "op_no_destination" -> PayResult.DestinationNotExists()
             else -> throw Error("Unknown payment error")

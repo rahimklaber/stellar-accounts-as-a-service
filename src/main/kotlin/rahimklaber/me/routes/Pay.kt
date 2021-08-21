@@ -17,6 +17,7 @@ import org.valiktor.functions.isNotEmpty
 import org.valiktor.validate
 import rahimklaber.me.models.PayRequestModel
 import rahimklaber.me.repositories.BalanceRepository
+import rahimklaber.me.services.WalletPayRequest
 import rahimklaber.me.services.WalletService
 
 
@@ -31,11 +32,12 @@ object Pay {
                     val payRequest = tryDecode.getOrThrow()
                         val username = principal?.payload?.subject ?: throw Error("Jwt principal is null")
                         val balance = withContext(Dispatchers.IO){ BalanceRepository.findByUsername (username)}
-                        val response = WalletService.pay(balance.muxedId,payRequest.destination,payRequest.amount.toFloat())
 
+                        val walletServicePayRequest = WalletPayRequest(balance.muxedId,payRequest.destination,payRequest.amount.toFloat())
+                        WalletService.sendPaymentRequest(walletServicePayRequest)
+                        val response = walletServicePayRequest.receiveResult()
                         call.respond(response.statusCode,"")
                 }else{
-                    println(tryDecode)
                     call.respond(HttpStatusCode.BadRequest,"")
                 }
 
