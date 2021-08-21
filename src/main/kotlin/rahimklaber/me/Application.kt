@@ -3,8 +3,13 @@ package rahimklaber.me
 import io.ktor.application.*
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.stellar.sdk.*
+import org.stellar.sdk.xdr.SignerKey
 import rahimklaber.me.models.Balance
+import rahimklaber.me.models.ChannelAccount
 import rahimklaber.me.models.ProcessedOperations
 import rahimklaber.me.models.User
 import rahimklaber.me.plugins.*
@@ -25,9 +30,45 @@ fun Application.module() {
         url = "jdbc:sqlite:$walletname"
     )
     transaction{
-        SchemaUtils.create(User,Balance,ProcessedOperations)
+        SchemaUtils.create(User,Balance,ProcessedOperations,ChannelAccount)
     }
     val secretKey = environment.config.property("stellar.secret").getString()
+    val channels = transaction {
+        val all = ChannelAccount.selectAll()
+        if(all.any()){
+            all.map { it[ChannelAccount.address] }
+        }else{
+            val keypair = KeyPair.fromSecretSeed(secretKey)
+            val seq = WalletService.server.accounts().account(keypair.accountId).sequenceNumber
+            val channelsToCreate = (0..5).map { KeyPair.random() }
+            val txBuilder = Transaction.Builder(Account(keypair.accountId,seq), Network.TESTNET)
+                    channelsToCreate.forEach {
+                        txBuilder.addOperation(CreateAccountOperation.Builder(it.accountId,"5").build())
+                            .addOperation(
+                                SetOptionsOperation.Builder()
+                                    .setSigner(keypair.xdrSignerKey,1)
+                                    .setSourceAccount(it.accountId)
+                                    .build()
+                            )
 
-    WalletService(secretKey)
+                    }
+            val tx = txBuilder.setBaseFee(120).setTimeout(0).build()
+            tx.sign(keypair)
+            channelsToCreate.forEach { tx.sign(it) }
+            val submitRes = WalletService.server.submitTransaction(tx)
+            if(submitRes.isSuccess){
+                transaction {
+                    channelsToCreate.forEach { channelkeypair ->
+                        ChannelAccount.insert {
+                            it[address] = channelkeypair.accountId
+                        }
+                    }
+                }
+                channelsToCreate.map { it.accountId }
+            }else{
+                listOf()
+            }
+        }
+    }
+    WalletService(secretKey,channels)
 }

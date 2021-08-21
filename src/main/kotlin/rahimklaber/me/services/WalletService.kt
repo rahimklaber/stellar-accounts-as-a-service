@@ -56,10 +56,17 @@ object WalletService {
     lateinit var streamEvent: SSEStream<OperationResponse>
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val payRequests = Channel<WalletPayRequest>(capacity = 100)
+
+    /**
+     * Channel accounts to make concurrent payments.
+     * The channels should have [keyPair] as a signer.
+     */
+    lateinit var channelAccounts : List<String>
     lateinit var paymentsHandlerJob: Job
 
     //start streaming from Horizon.
-    operator fun invoke(secret: String) {
+    operator fun invoke(secret: String, channelAccounts: List<String>) {
+        this.channelAccounts = channelAccounts
         keyPair = KeyPair.fromSecretSeed(secret)
         streamEvent = server.payments().forAccount(keyPair.accountId)
             .stream(object : EventListener<OperationResponse> {
@@ -109,15 +116,21 @@ object WalletService {
 
             })
         paymentsHandlerJob = scope.launch {
-            while (true){
-                delay(1000)
-                println("received")
-                val request = payRequests.receive()
-                launch {
-                    println("started")
-                    val result = pay(request.sourceMuxedId,request.destination,request.amount)
-                    println(result)
-                    request.sendResult(result)
+            scope.launch {
+                while (true){
+                    val request = payRequests.receive()
+                        val result = pay(request.sourceMuxedId,request.destination,request.amount)
+                        request.sendResult(result)
+                }
+            }
+            channelAccounts.forEach{
+                scope.launch {
+                    while (true){
+                        val request = payRequests.receive()
+                            val result = pay(request.sourceMuxedId,request.destination,request.amount,it)
+                            request.sendResult(result)
+
+                    }
                 }
             }
         }
@@ -194,7 +207,7 @@ object WalletService {
      * @param amount Payment amount
      * @return Payment result.
      */
-    suspend fun pay(muxedId: Long, destination: String, amount: Float): PayResult = mutex.withLock {
+    suspend fun pay(muxedId: Long, destination: String, amount: Float, channelAccount : String = keyPair.accountId): PayResult = mutex.withLock {
         val source = withContext(Dispatchers.IO) {
             BalanceRepository.findByMuxedId(muxedId)
         }
@@ -205,12 +218,14 @@ object WalletService {
 
         val muxedAddress = muxedAddressFromId(source.muxedId)
         val sequence = withContext(Dispatchers.IO) {
-            server.accounts().account(keyPair.accountId).sequenceNumber
+            server.accounts().account(channelAccount).sequenceNumber
         }
-        val account = Account(muxedAddress, sequence)
+        val account = Account(channelAccount, sequence)
         val tx = Transaction.Builder(AccountConverter.enableMuxed(), account, Network.TESTNET)
             .addOperation(
-                PaymentOperation.Builder(destination, AssetTypeNative(), amount.toString()).build()
+                PaymentOperation.Builder(destination, AssetTypeNative(), amount.toString())
+                    .setSourceAccount(muxedAddress)
+                    .build()
             )
             .setBaseFee(120)
             .setTimeout(0)
@@ -219,7 +234,7 @@ object WalletService {
             tx.sign(keyPair)
         } catch (e: FormatException) {
             // destination address is malformed
-            return PayResult.DestinationNotExists()
+            return PayResult.MalformedDestination()
         }
 
         val res = withContext(Dispatchers.IO) { server.submitTransaction(tx) }
