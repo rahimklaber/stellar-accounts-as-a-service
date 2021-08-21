@@ -1,4 +1,4 @@
-#Stellar accounts as a service
+# Stellar accounts as a service
 ## about
 This repo contains a basic implementation of a custodial Stellar wallet api.
 Users of the api can: 
@@ -9,7 +9,7 @@ Users of the api can:
 When first starting up, the server creates 5 stellar accounts to allow for concurrent payments.
 Todo: use more than one op in a tx.
 
-The full api spec can be found here: [ApiSpec]()
+The full api spec can be found here: [ApiSpec](https://editor.swagger.io/?url=https://raw.githubusercontent.com/rahimklaber/stellar-accounts-as-a-service/main/openapi.spec)
 
 ## Testing
 run `./gradlew test` to run the tests.
