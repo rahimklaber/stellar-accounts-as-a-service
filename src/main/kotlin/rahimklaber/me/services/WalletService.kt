@@ -40,12 +40,13 @@ sealed class PayResult(val statusCode: HttpStatusCode) {
     class MalformedDestination : PayResult(HttpStatusCode.BadRequest)
 }
 
-class WalletPayRequest(val sourceMuxedId: Long, val destination: String, val amount: BigDecimal){
+class WalletPayRequest(val sourceMuxedId: Long, val destination: String, val amount: BigDecimal) {
     private var resultChannel = Channel<PayResult>() //todo is this correct use?
 
     suspend fun sendResult(result: PayResult) = resultChannel.send(result)
     suspend fun receiveResult() = resultChannel.receive()
 }
+
 
 /**
  * Handles wallet operations. Currently only supports paying xlm to an address.
@@ -59,10 +60,32 @@ object WalletService {
     private val payRequests = Channel<WalletPayRequest>(capacity = 100)
 
     /**
+     * mutex to use when working with specific users.
+     *
+     * Prevents a user being able to "double-spend"
+     */
+    private val accountLocks = mutableMapOf<Long, Mutex>()
+    private val mapMutex = Mutex()
+
+    /**
+     *safe way to get locks from [accountLocks]
+     */
+    private suspend fun getAccountLockLazy(muxedId: Long): Mutex {
+        return accountLocks[muxedId] ?: mapMutex.withLock {
+            // multiple coroutines might have asked at the same time.
+            if (!accountLocks.containsKey(muxedId)) {
+                accountLocks[muxedId] = Mutex()
+            }
+            return accountLocks[muxedId]
+                ?: throw Error("Mutex for $muxedId is null, this shouldn't happen")
+        }
+    }
+
+    /**
      * Channel accounts to make concurrent payments.
      * The channels should have [keyPair] as a signer.
      */
-    lateinit var channelAccounts : List<String>
+    lateinit var channelAccounts: List<String>
     lateinit var paymentsHandlerJob: Job
 
     //start streaming from Horizon.
@@ -118,18 +141,23 @@ object WalletService {
             })
         paymentsHandlerJob = scope.launch {
             scope.launch {
-                while (true){
+                while (true) {
                     val request = payRequests.receive()
-                        val result = pay(request.sourceMuxedId,request.destination,request.amount)
+                    getAccountLockLazy(request.sourceMuxedId).withLock {
+                        val result = pay(request.sourceMuxedId, request.destination, request.amount)
                         request.sendResult(result)
+                    }
                 }
             }
-            channelAccounts.forEach{
+            channelAccounts.forEach {
                 scope.launch {
-                    while (true){
+                    while (true) {
                         val request = payRequests.receive()
-                            val result = pay(request.sourceMuxedId,request.destination,request.amount,it)
+                        getAccountLockLazy(request.sourceMuxedId).withLock {
+                            val result =
+                                pay(request.sourceMuxedId, request.destination, request.amount, it)
                             request.sendResult(result)
+                        }
 
                     }
                 }
@@ -208,7 +236,12 @@ object WalletService {
      * @param amount Payment amount
      * @return Payment result.
      */
-    suspend fun pay(muxedId: Long, destination: String, amount: BigDecimal, channelAccount : String = keyPair.accountId): PayResult {
+    suspend fun pay(
+        muxedId: Long,
+        destination: String,
+        amount: BigDecimal,
+        channelAccount: String = keyPair.accountId
+    ): PayResult {
         val source = withContext(Dispatchers.IO) {
             BalanceRepository.findByMuxedId(muxedId)
         }
