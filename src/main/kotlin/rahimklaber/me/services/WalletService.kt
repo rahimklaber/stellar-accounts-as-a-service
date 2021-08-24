@@ -23,6 +23,7 @@ import org.stellar.sdk.responses.operations.PaymentOperationResponse
 import rahimklaber.me.models.Balance
 import rahimklaber.me.models.ProcessedOperations
 import rahimklaber.me.repositories.BalanceRepository
+import rahimklaber.me.toProjectBigDecimal
 import shadow.com.google.common.base.Optional
 import shadow.com.google.common.io.BaseEncoding
 import shadow.com.google.common.primitives.Bytes
@@ -30,6 +31,7 @@ import shadow.com.google.common.primitives.Longs
 import shadow.okhttp3.Request
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.math.BigDecimal
 
 sealed class PayResult(val statusCode: HttpStatusCode) {
     class Ok : PayResult(HttpStatusCode.NoContent)
@@ -38,7 +40,7 @@ sealed class PayResult(val statusCode: HttpStatusCode) {
     class MalformedDestination : PayResult(HttpStatusCode.BadRequest)
 }
 
-class WalletPayRequest(val sourceMuxedId: Long, val destination: String, val amount: Float){
+class WalletPayRequest(val sourceMuxedId: Long, val destination: String, val amount: BigDecimal){
     private var resultChannel = Channel<PayResult>() //todo is this correct use?
 
     suspend fun sendResult(result: PayResult) = resultChannel.send(result)
@@ -206,12 +208,12 @@ object WalletService {
      * @param amount Payment amount
      * @return Payment result.
      */
-    suspend fun pay(muxedId: Long, destination: String, amount: Float, channelAccount : String = keyPair.accountId): PayResult {
+    suspend fun pay(muxedId: Long, destination: String, amount: BigDecimal, channelAccount : String = keyPair.accountId): PayResult {
         val source = withContext(Dispatchers.IO) {
             BalanceRepository.findByMuxedId(muxedId)
         }
 
-        if (source.balance < amount) {
+        if (source.balance.toProjectBigDecimal() < amount) {
             return PayResult.InsufficientBalance()
         }
 
@@ -240,7 +242,7 @@ object WalletService {
         if (res.isSuccess) {
             transaction {
                 Balance.update({ Balance.id eq source.muxedId }) {
-                    it[Balance.balance] = source.balance - amount
+                    it[Balance.balance] = (source.balance.toProjectBigDecimal() - amount).toDouble()
                 }
             }
             return PayResult.Ok()

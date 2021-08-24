@@ -19,33 +19,50 @@ import rahimklaber.me.models.PayRequestModel
 import rahimklaber.me.repositories.BalanceRepository
 import rahimklaber.me.services.WalletPayRequest
 import rahimklaber.me.services.WalletService
+import rahimklaber.me.toProjectBigDecimal
+import java.math.BigDecimal
+import java.math.MathContext
 
 
 object Pay {
 
-    fun Routing.pay(){
+    fun Routing.pay() {
         authenticate("auth-jwt") {
             post("/pay") {
                 val principal = call.principal<JWTPrincipal>()
-                val tryDecode = runCatching { val body = call.receive<PayRequestModel>();require(body.amount.toFloat() > 0);body }
-                if(tryDecode.isSuccess){
+                val tryDecode = runCatching {
+                    val body = call.receive<PayRequestModel>()
+                    require(
+                       body.amount.toBigDecimal().compareTo(
+                            BigDecimal.ZERO
+                        ) == 1
+                    )
+                    body
+                }
+                if (tryDecode.isSuccess) {
                     val payRequest = tryDecode.getOrThrow()
-                        val username = principal?.payload?.subject ?: throw Error("Jwt principal is null")
-                        val balance = withContext(Dispatchers.IO){ BalanceRepository.findByUsername (username)}
+                    val username =
+                        principal?.payload?.subject ?: throw Error("Jwt principal is null")
+                    val balance =
+                        withContext(Dispatchers.IO) { BalanceRepository.findByUsername(username) }
 
-                        val walletServicePayRequest = WalletPayRequest(balance.muxedId,payRequest.destination,payRequest.amount.toFloat())
-                        WalletService.sendPaymentRequest(walletServicePayRequest)
-                        val response = walletServicePayRequest.receiveResult()
-                        call.respond(response.statusCode,"")
-                }else{
-                    call.respond(HttpStatusCode.BadRequest,"")
+                    val walletServicePayRequest = WalletPayRequest(
+                        balance.muxedId,
+                        payRequest.destination,
+                        payRequest.amount.toProjectBigDecimal()
+                    )
+                    WalletService.sendPaymentRequest(walletServicePayRequest)
+                    val response = walletServicePayRequest.receiveResult()
+                    call.respond(response.statusCode, "")
+                } else {
+                    call.respond(HttpStatusCode.BadRequest, "")
                 }
 
             }
         }
     }
 
-    operator fun invoke(routing: Routing){
+    operator fun invoke(routing: Routing) {
         routing.pay()
     }
 }
