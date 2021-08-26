@@ -24,6 +24,8 @@ import rahimklaber.me.models.UserModel
 import rahimklaber.me.plugins.configureRouting
 import rahimklaber.me.plugins.configureSecurity
 import rahimklaber.me.services.WalletService
+import java.nio.file.Files
+import kotlin.io.path.Path
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,6 +33,8 @@ import kotlin.test.assertEquals
 
 class PayTest {
     private fun Application.setupEnv() {
+        if(!Files.exists(Path("test")))
+            Files.createDirectory(Path("test"))
         (environment.config as MapApplicationConfig).apply {
             put("jwt.audience", "test")
             put("jwt.realm", "test")
@@ -113,7 +117,7 @@ class PayTest {
             transaction {
                 Balance.update({ Balance.id eq 1 }) {
                     it[Balance.balance] =
-                        100.0f
+                        "100.0"
                 }
             }
             handleRequest(HttpMethod.Post,"/pay"){
@@ -137,7 +141,7 @@ class PayTest {
             transaction {
                 Balance.update({ Balance.id eq 1 }) {
                     it[Balance.balance] =
-                        100.0f
+                        "100.0"
                 }
             }
             handleRequest(HttpMethod.Post,"/pay"){

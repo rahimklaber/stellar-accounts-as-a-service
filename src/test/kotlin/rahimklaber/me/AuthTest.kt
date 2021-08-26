@@ -18,6 +18,8 @@ import org.stellar.sdk.KeyPair
 import rahimklaber.me.models.InfoResponse
 import rahimklaber.me.models.UserModel
 import rahimklaber.me.services.WalletService
+import java.nio.file.Files
+import kotlin.io.path.Path
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,11 +29,13 @@ import kotlin.test.fail
 class AuthTest {
 
     private fun Application.setupEnv() {
+        if(!Files.exists(Path("test")))
+            Files.createDirectory(Path("test"))
         (environment.config as MapApplicationConfig).apply {
             put("jwt.audience", "test")
             put("jwt.realm", "test")
             put("jwt.domain", "test")
-            put("stellar.secret", String(KeyPair.random().secretSeed))
+            put("stellar.secret", "SAKAV6SBYWF72ELNN5M4LDZDTQLLW6DOZNEVEKS6VBBBIHHXZFV4FWZE")
             put("database.dbname", "test/test-${Random.nextLong()}-.db")
         }
     }

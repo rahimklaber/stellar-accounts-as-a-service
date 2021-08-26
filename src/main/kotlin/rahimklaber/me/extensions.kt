@@ -10,12 +10,11 @@ import java.math.RoundingMode
 
 
 
-val mathContext = MathContext(7,RoundingMode.FLOOR)
 
 fun String.toProjectBigDecimal(): BigDecimal {
-    return BigDecimal(this, mathContext)
+    return BigDecimal(this).setScale(7) // 7 decimals after comma
 }
 
 fun Double.toProjectBigDecimal(): BigDecimal{
-    return BigDecimal(this, mathContext)
+    return BigDecimal(this).setScale(7)  // 7 decimals after comma
 }

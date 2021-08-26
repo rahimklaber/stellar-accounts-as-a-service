@@ -73,7 +73,7 @@ object AuthService {
         val tx = transaction {
             kotlin.runCatching {
                val muxedId = Balance.insert {
-                   it[this.balance] = .0f
+                   it[this.balance] = "0.0"
                }[Balance.id]
 
                 User.insert {

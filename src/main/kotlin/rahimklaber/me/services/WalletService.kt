@@ -121,7 +121,7 @@ object WalletService {
                                         .first()
                                     Balance.update({ Balance.id eq muxedId }) {
                                         it[Balance.balance] =
-                                            balance[Balance.balance] + payment.amount.toFloat()
+                                            (balance[Balance.balance].toProjectBigDecimal() + payment.amount.toProjectBigDecimal()).toPlainString()
                                     }
                                     ProcessedOperations.insert {
                                         it[id] = payment.id
@@ -275,7 +275,7 @@ object WalletService {
         if (res.isSuccess) {
             transaction {
                 Balance.update({ Balance.id eq source.muxedId }) {
-                    it[Balance.balance] = (source.balance.toProjectBigDecimal() - amount).toDouble()
+                    it[Balance.balance] = (source.balance.toProjectBigDecimal() - amount).toPlainString()
                 }
             }
             return PayResult.Ok()
