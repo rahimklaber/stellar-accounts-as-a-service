@@ -140,6 +140,7 @@ object WalletService {
 
             })
         paymentsHandlerJob = scope.launch {
+            //Todo: Make double spending impossible, maybe do something that one user's requests goes to only one channel account
             scope.launch {
                 while (true) {
                     val request = payRequests.receive()
@@ -229,7 +230,6 @@ object WalletService {
     /**
      * Handle payments for users of the service.
      *
-     * A mutex is used to prevent a user from making two requests in quick succession and "Double spending".
      *
      * @param username Payment source username.
      * @param destination Payment destination
@@ -243,7 +243,7 @@ object WalletService {
         channelAccount: String = keyPair.accountId
     ): PayResult {
         val source = withContext(Dispatchers.IO) {
-            BalanceRepository.findByMuxedId(muxedId)
+            BalanceRepository.findByMuxedId(muxedId)!!
         }
 
         if (source.balance.toProjectBigDecimal() < amount) {

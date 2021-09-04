@@ -32,10 +32,13 @@ object Pay {
                 val principal = call.principal<JWTPrincipal>()
                 val tryDecode = runCatching {
                     val body = call.receive<PayRequestModel>()
+                    val amount = body.amount.toBigDecimal()
                     require(
-                       body.amount.toBigDecimal().compareTo(
+                        (amount.compareTo(
                             BigDecimal.ZERO
-                        ) == 1
+                        ) == 1) // amount > 0
+                                &&
+                                (amount.scale() <= 7)
                     )
                     body
                 }
@@ -45,15 +48,18 @@ object Pay {
                         principal?.payload?.subject ?: throw Error("Jwt principal is null")
                     val balance =
                         withContext(Dispatchers.IO) { BalanceRepository.findByUsername(username) }
-
-                    val walletServicePayRequest = WalletPayRequest(
-                        balance.muxedId,
-                        payRequest.destination,
-                        payRequest.amount.toProjectBigDecimal()
-                    )
-                    WalletService.sendPaymentRequest(walletServicePayRequest)
-                    val response = walletServicePayRequest.receiveResult()
-                    call.respond(response.statusCode, "")
+                    if(balance == null){
+                        call.respond(HttpStatusCode.Unauthorized,"")
+                    }else{
+                        val walletServicePayRequest = WalletPayRequest(
+                            balance.muxedId,
+                            payRequest.destination,
+                            payRequest.amount.toProjectBigDecimal()
+                        )
+                        WalletService.sendPaymentRequest(walletServicePayRequest)
+                        val response = walletServicePayRequest.receiveResult()
+                        call.respond(response.statusCode, "")
+                    }
                 } else {
                     call.respond(HttpStatusCode.BadRequest, "")
                 }

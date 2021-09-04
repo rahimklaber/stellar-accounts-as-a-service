@@ -21,8 +21,12 @@ object Info {
                 val principal = call.principal<JWTPrincipal>()
                 val username = principal?.payload?.subject ?: throw Error("Jwt principal is null")
                 val balance = BalanceRepository.findByUsername(username)
-                val address = WalletService.muxedAddressFromId(balance.muxedId)
-                call.respond(HttpStatusCode.OK,InfoResponse(address,balance.balance.toString()))
+                if(balance == null){
+                    call.respond(HttpStatusCode.Unauthorized,"")
+                }else{
+                    val address = WalletService.muxedAddressFromId(balance.muxedId)
+                    call.respond(HttpStatusCode.OK,InfoResponse(address,balance.balance.toString()))
+                }
             }
         }
     }
