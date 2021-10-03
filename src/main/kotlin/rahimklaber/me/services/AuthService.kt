@@ -16,7 +16,8 @@ import java.util.*
 
 enum class RegisterResponse(val responseCode: HttpStatusCode){
     Success(HttpStatusCode.NoContent),
-    ExistingAccount(HttpStatusCode.Conflict)
+    ExistingAccount(HttpStatusCode.Conflict),
+    InvalidUsernameOrPassword(HttpStatusCode.BadRequest) // for if username or password not "strong" enough.
 }
 
 sealed class LoginResponse(val response: HttpStatusCode, val token : String){
@@ -24,7 +25,37 @@ sealed class LoginResponse(val response: HttpStatusCode, val token : String){
     class InvalidCredentials : LoginResponse(HttpStatusCode.Unauthorized,"")
 }
 
+/**
+ * Check whether a password and username are "strong" enough and that they don't contain unexpected input.
+ *
+ */
+open class CredentialsChecker(){
+    /**
+     * @return True if valid, false otherwise
+     */
+    open fun evaluateUsername(username: String) : Boolean{
+        if(username.length >  18){
+            return false
+        }
+        return true
+    }
+
+    open fun evaluatePassword(password: String) : Boolean{
+        if(password.length < 6){
+            return false
+        }
+        return true
+    }
+
+}
+
 object AuthService {
+    var credentialsChecker : CredentialsChecker = CredentialsChecker()
+
+    operator fun invoke(credentialsChecker: CredentialsChecker){
+        this.credentialsChecker = credentialsChecker
+    }
+
     fun hashPassword(password: String): String {
         return BCrypt.withDefaults().hashToString(12, password.toCharArray())
     }
@@ -69,6 +100,9 @@ object AuthService {
     }
 
     fun register(name: String, password: String): RegisterResponse{
+        if(!credentialsChecker.evaluateUsername(name) || !credentialsChecker.evaluatePassword(password)){
+            return RegisterResponse.InvalidUsernameOrPassword
+        }
         val hashedPassword = hashPassword(password)
         val tx = transaction {
             kotlin.runCatching {
