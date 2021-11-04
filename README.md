@@ -1,4 +1,6 @@
 # Stellar accounts as a service
+## todo
+- dynamically increase number of channel accounts
 ## about
 This repo contains a basic implementation of a custodial Stellar wallet api.
 Users of the api can: 
